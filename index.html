@@ -2,76 +2,424 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>RPG Chess - 통합 버전</title>
+    <title>RPG Chess - 덱 편집기 및 전장</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; background: #222; color: #fff; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
+        body { font-family: 'Malgun Gothic', sans-serif; background: #222; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; user-select: none; }
+        #lobby, #deck-editor, #game-container { background: #333; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; }
         .hidden { display: none !important; }
-        button { background: #7f8c8d; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin: 5px; }
+        
+        /* 기본 버튼 스타일 */
+        button { background: #7f8c8d; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; margin: 5px; transition: 0.2s; font-weight: bold; }
+        
+        /* 이동 및 공격 모드 활성화 스타일 */
+        button#btn-mode-move.mode-active { background: #2ecc71 !important; box-shadow: 0 0 12px #2ecc71; }
+        button#btn-mode-attack.mode-active { background: #e74c3c !important; box-shadow: 0 0 12px #e74c3c; }
+        
+        /* 덱 에디터 레이아웃 */
+        .editor-container { width: 500px; border: 3px solid #fff; border-radius: 8px; background: #1a1a1a; padding: 20px; display: flex; flex-direction: column; align-items: center; position: relative; }
+        .back-btn { position: absolute; top: 15px; left: 15px; font-size: 24px; cursor: pointer; background: none; border: none; color: white; margin: 0; padding: 0; }
+        
+        .deck-slots { display: flex; gap: 10px; margin-top: 40px; margin-bottom: 5px; }
+        .slot { width: 60px; height: 80px; border: 2px solid #fff; background: #2c3e50; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; position: relative; border-radius: 4px; box-sizing: border-box; }
+        .slot-labels { display: flex; gap: 10px; margin-bottom: 20px; }
+        .label { width: 60px; text-align: center; font-size: 13px; font-weight: bold; color: #f1c40f; }
+        
+        .divider { width: 100%; border-top: 3px solid #fff; margin-bottom: 20px; }
+        .pool-container { width: 95%; height: 260px; border: 2px solid #fff; background: #222; padding: 10px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-content: flex-start; box-sizing: border-box; }
+        
+        .piece-card { width: 60px; height: 80px; background: #34495e; border: 1px solid #7f8c8d; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; cursor: grab; box-sizing: border-box; }
+        
+        /* 체스판 및 기물 레이아웃 */
         .board { display: grid; grid-template-columns: repeat(8, 65px); grid-template-rows: repeat(8, 65px); border: 5px solid #444; margin: 20px auto; }
-        .cell { width: 65px; height: 65px; border: 1px solid #555; }
+        .cell { width: 65px; height: 65px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; position: relative; box-sizing: border-box; }
+        .white { background: #f0d9b5; color: #b58863; }
+        .black { background: #b58863; color: #f0d9b5; }
+        
+        .piece { width: 90%; height: 90%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); font-size: 11px; }
+        .piece.team-A { background: #2980b9; color: #fff; box-shadow: inset 0 0 8px #1f4f75; }
+        .piece.team-B { background: #d35400; color: #fff; box-shadow: inset 0 0 8px #823400; }
+        .piece.stealth { opacity: 0.15; border: 2px dashed #f1c40f !important; }
+        .piece.bomb-p { background: #2c3e50 !important; border: 2px solid #e74c3c !important; animation: blink 1s infinite alternate; }
+        
+        /* 네모난 빛나는 테두리 효과 (초록색 / 빨간색) */
+        .cell.movable { border: 3px solid #2ecc71 !important; box-shadow: inset 0 0 10px #2ecc71, 0 0 10px #2ecc71; z-index: 1; }
+        .cell.attackable { border: 3px solid #e74c3c !important; box-shadow: inset 0 0 10px #e74c3c, 0 0 10px #e74c3c; z-index: 1; }
+        .cell.selected { border: 3px solid #f1c40f !important; z-index: 2; }
+
+        .control-panel { display: flex; gap: 10px; width: 524px; margin-top: 10px; }
+        .control-panel button { flex: 1; }
+        
+        /* 복사 영역 래퍼 */
+        .code-container { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+        .btn-copy { background: #34495e; font-size: 12px; padding: 4px 8px; margin: 0; border-radius: 4px; }
+        .btn-copy:hover { background: #465866; }
+
+        @keyframes blink { from { opacity: 0.6; } to { opacity: 1; } }
     </style>
 </head>
 <body>
 
     <div id="lobby">
         <h2>RPG CHESS LOBBY</h2>
-        <button id="btn-create">방 만들기</button>
-        <button id="btn-deck-open">덱 수정하기</button>
+        <button id="btn-create" style="background:#e74c3c;">방 만들기</button>
+        <button id="btn-deck-open" style="background:#34495e;">덱 수정하기</button>
+        <br><br>
         <input type="text" id="room-input" placeholder="방 코드 입력">
-        <button id="btn-join">방 참가하기</button>
+        <button id="btn-join" style="background:#2980b9;">방 참가하기</button>
     </div>
 
     <div id="deck-editor" class="hidden">
-        <div id="deck-slots"></div>
-        <div id="pool-list"></div>
-        <button id="btn-deck-save">저장 후 로비로</button>
+        <div class="editor-container">
+            <button class="back-btn" id="btn-deck-close">←</button>
+            <div class="deck-slots">
+                <div class="slot" data-index="0" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
+                <div class="slot" data-index="1" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
+                <div class="slot" data-index="2" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
+                <div class="slot" data-index="3" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
+                <div class="slot" data-index="4" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
+                <div class="slot" data-index="5" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
+            </div>
+            <div class="slot-labels">
+                <div class="label">폰</div><div class="label">나이트</div><div class="label">룩</div><div class="label">비숍</div><div class="label">퀸</div><div class="label">킹</div>
+            </div>
+            <div class="divider"></div>
+            <div class="pool-container" id="pool-list"></div>
+            <button id="btn-deck-save" style="margin-top:15px; width:100%; background:#2ecc71;">조합 저장 및 확정</button>
+        </div>
     </div>
 
     <div id="game-container" class="hidden">
-        <h3 id="turn-display">상대방 대기 중...</h3>
+        <div id="room-info-wrapper" class="code-container">
+            <h3 id="turn-display" style="margin: 0;">상대방 대기 중...</h3>
+        </div>
         <div class="board" id="chess-board"></div>
-        <button id="btn-mode-move">이동</button>
-        <button id="btn-mode-attack">공격</button>
-        <button id="btn-end-turn">턴 종료</button>
+        
+        <div class="control-panel">
+            <button id="btn-mode-move">이동</button>
+            <button id="btn-mode-attack">공격</button>
+            <button id="btn-end-turn" style="background:#34495e;">턴종료</button>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
+        let currentRoomId = null;
+        let selectedSquare = null;
+        let currentMode = 'move'; 
+        let movableCells = [];
+        let attackableCells = [];
+        let pieceDB = {};
+        let currentBoard = [];
+        let myRole = null;
+
         let myDeck = ['Pawn', 'Mercenary', 'Assassin', 'Berserker', 'RushWarrior', 'Apprentice'];
+        const CLIENT_DB = {
+            'Pawn': '병사', 'Mercenary': '용병', 'Assassin': '암살자', 'Berserker': '광전사',
+            'RushWarrior': '돌격병', 'Apprentice': '견습생', 'SuicideBomber': '자살폭탄', 'GhostKnight': '기사영혼'
+        };
+
         const lobby = document.getElementById('lobby');
         const deckEditor = document.getElementById('deck-editor');
         const gameContainer = document.getElementById('game-container');
 
-        // [방 기능 복원]
-        document.getElementById('btn-create').onclick = () => socket.emit('createRoom', { customDeck: myDeck });
-        document.getElementById('btn-join').onclick = () => {
-            const code = document.getElementById('room-input').value;
-            socket.emit('joinRoom', { roomId: code, customDeck: myDeck });
-        };
+        const btnCreate = document.getElementById('btn-create');
+        const btnDeckOpen = document.getElementById('btn-deck-open');
+        const btnDeckClose = document.getElementById('btn-deck-close');
+        const btnDeckSave = document.getElementById('btn-deck-save');
+        const btnJoin = document.getElementById('btn-join');
+        const btnEndTurn = document.getElementById('btn-end-turn');
+        const btnModeMove = document.getElementById('btn-mode-move');
+        const btnModeAttack = document.getElementById('btn-mode-attack');
 
-        // [방 생성/참가 이벤트 처리]
-        socket.on('roomCreated', ({ roomId }) => alert('방 생성 완료! 코드: ' + roomId));
-        socket.on('gameStarted', ({ roomId }) => {
-            lobby.classList.add('hidden');
-            gameContainer.classList.remove('hidden');
+        if(btnDeckOpen) btnDeckOpen.addEventListener('click', () => { lobby.classList.add('hidden'); deckEditor.classList.remove('hidden'); renderEditor(); });
+        if(btnDeckClose) btnDeckClose.addEventListener('click', () => { deckEditor.classList.add('hidden'); lobby.classList.remove('hidden'); });
+        if(btnDeckSave) btnDeckSave.addEventListener('click', () => { alert('나만의 조합 구성이 동기화되었습니다!'); deckEditor.classList.add('hidden'); lobby.classList.remove('hidden'); });
+
+        function renderEditor() {
+            const poolList = document.getElementById('pool-list');
+            if(!poolList) return;
+            poolList.innerHTML = '';
+            Object.keys(CLIENT_DB).forEach(key => {
+                const card = document.createElement('div');
+                card.className = 'piece-card'; card.draggable = true; card.id = `drag-${key}`;
+                card.innerHTML = `<div style="font-weight:bold;">${CLIENT_DB[key]}</div><div style="font-size:8px; color:#bdc3c7; margin-top:4px;">${key}</div>`;
+                card.addEventListener('dragstart', (e) => { e.dataTransfer.setData("text/plain", key); });
+                poolList.appendChild(card);
+            });
+            updateSlotUI();
+        }
+
+        function updateSlotUI() {
+            const slots = document.querySelectorAll('.slot');
+            slots.forEach((slot, idx) => {
+                const type = myDeck[idx];
+                slot.innerText = type ? CLIENT_DB[type] : 'Empty';
+                if(type) slot.setAttribute('data-piece', type);
+            });
+        }
+
+        function allowDrop(e) { e.preventDefault(); }
+        function drop(e) { e.preventDefault(); const pieceType = e.dataTransfer.getData("text/plain") || e.dataTransfer.getData("text"); const slot = e.target.closest('.slot'); if (slot && pieceType) { const idx = slot.getAttribute('data-index'); myDeck[idx] = pieceType; updateSlotUI(); } }
+
+        if(btnCreate) btnCreate.addEventListener('click', () => { socket.emit('createRoom', { customDeck: myDeck }); });
+        if(btnJoin) btnJoin.addEventListener('click', () => { const roomInput = document.getElementById('room-input'); const code = roomInput ? roomInput.value.trim() : ''; if(code) socket.emit('joinRoom', { roomId: code, customDeck: myDeck }); });
+        if(btnEndTurn) btnEndTurn.addEventListener('click', () => { if(currentRoomId) socket.emit('endTurn', currentRoomId); });
+
+        if(btnModeMove) btnModeMove.addEventListener('click', () => setActionMode('move'));
+        if(btnModeAttack) btnModeAttack.addEventListener('click', () => setActionMode('attack'));
+
+        function setActionMode(mode) {
+            currentMode = mode;
+            btnModeMove.classList.toggle('mode-active', mode === 'move');
+            btnModeAttack.classList.toggle('mode-active', mode === 'attack');
+            
+            if(selectedSquare) {
+                const piece = currentBoard[selectedSquare.y][selectedSquare.x];
+                if(piece && piece.player === myRole) calculatePaths(selectedSquare.x, selectedSquare.y, piece);
+            }
+        }
+
+        // 🛠️ 방 생성 시 숫자 8자리 코드 표시 및 복사 버튼 붙이기
+        socket.on('roomCreated', ({ roomId }) => { 
+            currentRoomId = roomId; 
+            myRole = 'A'; 
+            lobby.classList.add('hidden'); 
+            gameContainer.classList.remove('hidden'); 
+            
+            const turnDisplay = document.getElementById('turn-display');
+            if(turnDisplay) turnDisplay.innerText = `방 코드: ${roomId} (상대방 대기 중)`;
+            
+            // 복사 버튼 동적 생성 (중복 방지)
+            const wrapper = document.getElementById('room-info-wrapper');
+            if(wrapper && !document.getElementById('btn-code-copy')) {
+                const copyBtn = document.createElement('button');
+                copyBtn.id = 'btn-code-copy';
+                copyBtn.className = 'btn-copy';
+                copyBtn.innerText = '복사';
+                copyBtn.onclick = () => {
+                    navigator.clipboard.writeText(roomId).then(() => {
+                        alert('방 코드가 복사되었습니다!');
+                    });
+                };
+                wrapper.appendChild(copyBtn);
+            }
+            setActionMode('move'); 
         });
 
-        // [덱 수정 기능 복원]
-        document.getElementById('btn-deck-open').onclick = () => { lobby.classList.add('hidden'); deckEditor.classList.remove('hidden'); };
-        document.getElementById('btn-deck-save').onclick = () => { deckEditor.classList.add('hidden'); lobby.classList.remove('hidden'); };
-
-        // [게임 핵심 로직 (서버 데이터 기반)]
-        socket.on('actionProcessed', ({ board, rushMoveLeft, rushAttackLeft }) => {
-            // 보드 업데이트
-            // btnModeMove.disabled = (rushMoveLeft <= 0);
-            // btnModeAttack.disabled = (rushAttackLeft <= 0);
+        socket.on('gameStarted', ({ roomId, board, players, turn, db }) => { 
+            currentRoomId = roomId; 
+            pieceDB = db; 
+            if (!myRole) myRole = socket.id === players[0] ? 'A' : 'B'; 
+            lobby.classList.add('hidden'); 
+            deckEditor.classList.add('hidden'); 
+            gameContainer.classList.remove('hidden'); 
             
-            // 모든 기회 소진 시 자동 턴 종료 유도
-            if (rushMoveLeft <= 0 && rushAttackLeft <= 0) {
-                socket.emit('endTurn', currentRoomId);
+            // 게임 시작하면 복사 버튼 삭제하고 상단 텍스트 정상 전환
+            const copyBtn = document.getElementById('btn-code-copy');
+            if(copyBtn) copyBtn.remove();
+            
+            updateTurnHeader(turn); 
+            setActionMode('move'); 
+            drawBoard(board); 
+        });
+
+        socket.on('actionProcessed', ({ board, activePiece }) => { 
+            drawBoard(board); 
+            clearHighlights(); 
+            
+            let prevSelected = selectedSquare;
+            selectedSquare = activePiece; 
+
+            if(selectedSquare) { 
+                const piece = currentBoard[selectedSquare.y][selectedSquare.x];
+                
+                // 내 기물일 때만 선택 테두리 래핑 활성화
+                if(piece && piece.player === myRole) {
+                    const cell = document.querySelector(`[data-x="${selectedSquare.x}"][data-y="${selectedSquare.y}"]`); 
+                    if(cell) cell.classList.add('selected'); 
+
+                    if (currentMode === 'move' && prevSelected && (selectedSquare.x !== prevSelected.x || selectedSquare.y !== prevSelected.y)) {
+                        if (piece.type === 'RushWarrior') {
+                            if (piece.moveCount >= 2 || piece.actionDone) { 
+                                setActionMode('attack');
+                            } else {
+                                setActionMode('move'); 
+                            }
+                        } else {
+                            setActionMode('attack');
+                        }
+                    } else {
+                        setActionMode(currentMode); 
+                    }
+                } else {
+                    selectedSquare = null;
+                    setActionMode('move');
+                }
+            } else {
+                setActionMode('move');
             }
         });
+
+        socket.on('turnSwapped', ({ turn, board }) => { updateTurnHeader(turn); drawBoard(board); clearState(); });
+
+        function updateTurnHeader(turnId) { const turnDisplay = document.getElementById('turn-display'); if(turnDisplay) turnDisplay.innerText = socket.id === turnId ? "당신의 턴입니다" : "상대방이 생각 중입니다"; }
+        function clearState() { selectedSquare = null; setActionMode('move'); clearHighlights(); }
+
+        function drawBoard(board) {
+            currentBoard = board;
+            const container = document.getElementById('chess-board');
+            if(!container) return;
+            container.innerHTML = '';
+
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) {
+                    const y = myRole === 'A' ? i : 7 - i;
+                    const x = myRole === 'A' ? j : 7 - j;
+
+                    const cell = document.createElement('div');
+                    cell.className = `cell ${(y + x) % 2 === 0 ? 'white' : 'black'}`;
+                    cell.setAttribute('data-x', x);
+                    cell.setAttribute('data-y', y);
+
+                    const p = board[y][x];
+                    if (p) {
+                        if (p.player !== myRole && p.stealth) {
+                            // 은신
+                        } else {
+                            const pDiv = document.createElement('div');
+                            pDiv.className = `piece team-${p.player} ${p.stealth ? 'stealth' : ''} ${p.type === 'Bomb' ? 'bomb-p' : ''}`;
+                            pDiv.innerText = pieceDB[p.type] ? pieceDB[p.type].name : p.type;
+                            cell.appendChild(pDiv);
+                        }
+                    }
+
+                    cell.addEventListener('click', () => handleCellClick(x, y));
+                    container.appendChild(cell);
+                }
+            }
+        }
+
+        function handleCellClick(x, y) {
+            if (currentMode === 'move' && movableCells.some(c => c.x === x && c.y === y)) {
+                socket.emit('actionMove', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
+                return;
+            }
+            if (currentMode === 'attack' && attackableCells.some(c => c.x === x && c.y === y)) {
+                socket.emit('actionAttack', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
+                setTimeout(() => { setActionMode('move'); selectedSquare = null; clearHighlights(); }, 100);
+                return;
+            }
+
+            clearHighlights();
+            document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected'));
+            selectedSquare = null;
+
+            const piece = currentBoard[y][x];
+            // 🛠️ 1번 요구사항 수정: 내 기물(piece.player === myRole)일 때만 아웃라인 및 사거리 연산 실행
+            if (piece && piece.player === myRole && piece.type !== 'Bomb') {
+                selectedSquare = { x, y };
+                const selectedCell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+                if(selectedCell) selectedCell.classList.add('selected');
+                calculatePaths(x, y, piece);
+            }
+        }
+
+        function calculatePaths(cx, cy, piece) {
+            clearHighlights();
+            if (piece.player !== myRole) return; // 한번 더 안전장치 추가 (내 기물만 연산)
+
+            const data = pieceDB[piece.type];
+            if (!data) return;
+
+            const dirMap = {
+                '1': { x: -1, y: 1 },  '2': { x: 0, y: 1 },  '3': { x: 1, y: 1 },
+                '4': { x: -1, y: 0 },                        '6': { x: 1, y: 0 },
+                '7': { x: -1, y: -1 }, '8': { x: 0, y: -1 }, '9': { x: 1, y: -1 }
+            };
+
+            const isTeamB = piece.player === 'B';
+
+            if (currentMode === 'move') {
+                if (data.moveDirs.includes('L')) {
+                    const knightMoves = [
+                        {x:cx-1, y:cy-2}, {x:cx+1, y:cy-2}, {x:cx-2, y:cy-1}, {x:cx+2, y:cy-1},
+                        {x:cx-2, y:cy+1}, {x:cx+2, y:cy+1}, {x:cx-1, y:cy+2}, {x:cx+1, y:cy+2}
+                    ];
+                    knightMoves.forEach(m => {
+                        if (m.x >= 0 && m.x < 8 && m.y >= 0 && m.y < 8) {
+                            const target = currentBoard[m.y][m.x];
+                            if (!target || target.type === 'Bomb') movableCells.push(m);
+                        }
+                    });
+                } else {
+                    let rangeM = data.moveRange;
+                    if (piece.type === 'Pawn' && piece.isFirstMove) rangeM = 2;
+
+                    data.moveDirs.forEach(d => {
+                        let offset = dirMap[d]; if (!offset) return;
+                        let stepX = offset.x;
+                        let stepY = isTeamB ? offset.y : -offset.y;
+
+                        for (let r = 1; r <= rangeM; r++) {
+                            let tx = cx + stepX * r; let ty = cy + stepY * r;
+                            if (tx < 0 || tx > 7 || ty < 0 || ty > 7) break;
+
+                            const target = currentBoard[ty][tx];
+                            if (!target || target.type === 'Bomb') {
+                                movableCells.push({ x: tx, y: ty });
+                            } else {
+                                break; 
+                            }
+                        }
+                    });
+                }
+            } 
+            else if (currentMode === 'attack') {
+                if (data.attackDirs.includes('L')) {
+                    const knightMoves = [
+                        {x:cx-1, y:cy-2}, {x:cx+1, y:cy-2}, {x:cx-2, y:cy-1}, {x:cx+2, y:cy-1},
+                        {x:cx-2, y:cy+1}, {x:cx+2, y:cy+1}, {x:cx-1, y:cy+2}, {x:cx+1, y:cy+2}
+                    ];
+                    knightMoves.forEach(m => {
+                        if (m.x >= 0 && m.x < 8 && m.y >= 0 && m.y < 8) {
+                            const target = currentBoard[m.y][m.x];
+                            if (!target || (target.player !== piece.player && !target.stealth && target.type !== 'Bomb')) {
+                                attackableCells.push(m);
+                            }
+                        }
+                    });
+                } else {
+                    data.attackDirs.forEach(d => {
+                        let offset = dirMap[d]; if (!offset) return;
+                        let stepX = offset.x;
+                        let stepY = isTeamB ? offset.y : -offset.y;
+
+                        for (let r = 1; r <= data.attackRange; r++) {
+                            let tx = cx + stepX * r; let ty = cy + stepY * r;
+                            if (tx < 0 || tx > 7 || ty < 0 || ty > 7) break;
+
+                            const target = currentBoard[ty][tx];
+                            if (!target || (target.player !== piece.player && !target.stealth && target.type !== 'Bomb')) {
+                                attackableCells.push({ x: tx, y: ty });
+                            }
+                        }
+                    });
+                }
+            }
+
+            movableCells.forEach(c => { const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`); if(targetCell) targetCell.classList.add('movable'); });
+            attackableCells.forEach(c => { const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`); if(targetCell) targetCell.classList.add('attackable'); });
+        }
+
+        function deleteHighlights() {
+            clearHighlights();
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.cell').forEach(c => { c.classList.remove('movable', 'attackable'); });
+            movableCells = []; attackableCells = [];
+        }
     </script>
 </body>
 </html>

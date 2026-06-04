@@ -7,11 +7,15 @@
         body { font-family: 'Malgun Gothic', sans-serif; background: #222; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; user-select: none; }
         #lobby, #deck-editor, #game-container { background: #333; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; }
         .hidden { display: none !important; }
-        button { background: #e74c3c; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; margin: 5px; transition: 0.2s; }
-        button:hover { background: #c0392b; }
-        button.mode-active { background: #2ecc71 !important; box-shadow: 0 0 10px #2ecc71; }
-        input { padding: 10px; font-size: 16px; border-radius: 6px; border: 1px solid #ddd; text-align: center; width: 150px; background: #fff; color: #000; }
         
+        /* 🕹️ 기본 버튼 스타일 (초기 상태) */
+        button { background: #7f8c8d; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; margin: 5px; transition: 0.2s; font-weight: bold; }
+        
+        /* 🟢 이동 모드 활성화 (초록색) / 🔴 공격 모드 활성화 (빨간색) */
+        button#btn-mode-move.mode-active { background: #2ecc71 !important; box-shadow: 0 0 12px #2ecc71; }
+        button#btn-mode-attack.mode-active { background: #e74c3c !important; box-shadow: 0 0 12px #e74c3c; }
+        
+        /* 유저 덱 에디터 스타일 */
         .editor-container { width: 500px; border: 3px solid #fff; border-radius: 8px; background: #1a1a1a; padding: 20px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .back-btn { position: absolute; top: 15px; left: 15px; font-size: 24px; cursor: pointer; background: none; border: none; color: white; margin: 0; padding: 0; }
         
@@ -39,13 +43,15 @@
         .piece.stealth { opacity: 0.15; border: 2px dashed #f1c40f !important; }
         .piece.bomb-p { background: #2c3e50 !important; border: 2px solid #e74c3c !important; animation: blink 1s infinite alternate; }
         
-        /* 인디케이터 클래스 */
-        .cell.movable::after { content: ''; position: absolute; width: 20px; height: 20px; background: rgba(52, 152, 219, 0.7); border-radius: 50%; }
-        .cell.attackable { box-shadow: inset 0 0 15px rgba(231, 76, 60, 0.9); border: 2px solid #e74c3c; }
+        /* 🟢 이동 가능 칸 하이라이트 (초록색 원) */
+        .cell.movable::after { content: ''; position: absolute; width: 22px; height: 22px; background: rgba(46, 204, 113, 0.75); border-radius: 50%; }
+        
+        /* 🔴 공격 가능 칸 하이라이트 (붉은색 테두리 및 섀도우) */
+        .cell.attackable { box-shadow: inset 0 0 15px rgba(231, 76, 60, 0.9); border: 3px solid #e74c3c; }
         .cell.selected { border: 3px solid #f1c40f; }
 
         .control-panel { display: flex; gap: 10px; width: 524px; margin-top: 10px; }
-        .control-panel button { flex: 1; font-weight: bold; }
+        .control-panel button { flex: 1; }
 
         @keyframes blink { from { opacity: 0.6; } to { opacity: 1; } }
     </style>
@@ -54,11 +60,11 @@
 
     <div id="lobby">
         <h2>⚔️ RPG CHESS LOBBY ⚔️</h2>
-        <button id="btn-create">방 만들기</button>
-        <button id="btn-deck-open">📦 덱 수정하기</button>
+        <button id="btn-create" style="background:#e74c3c;">방 만들기</button>
+        <button id="btn-deck-open" style="background:#34495e;">📦 덱 수정하기</button>
         <br><br>
         <input type="text" id="room-input" placeholder="방 코드 입력">
-        <button id="btn-join">방 참가하기</button>
+        <button id="btn-join" style="background:#2980b9;">방 참가하기</button>
     </div>
 
     <div id="deck-editor" class="hidden">
@@ -87,7 +93,7 @@
         
         <div class="control-panel">
             <button id="btn-mode-move">👟 이동 모드</button>
-            <button id="btn-mode-attack" style="background:#c0392b;">⚔️ 공격 모드</button>
+            <button id="btn-mode-attack">⚔️ 공격 모드</button>
             <button id="btn-end-turn" style="background:#34495e;">⏳ 턴 종료하기</button>
         </div>
     </div>
@@ -97,7 +103,7 @@
         const socket = io();
         let currentRoomId = null;
         let selectedSquare = null;
-        let currentMode = null; // 'move' 또는 'attack'
+        let currentMode = 'move'; // 기본 디폴트 모드를 'move'로 고정 설정
         let movableCells = [];
         let attackableCells = [];
         let pieceDB = {};
@@ -114,10 +120,10 @@
         const deckEditor = document.getElementById('deck-editor');
         const gameContainer = document.getElementById('game-container');
 
+        const btnCreate = document.getElementById('btn-create');
         const btnDeckOpen = document.getElementById('btn-deck-open');
         const btnDeckClose = document.getElementById('btn-deck-close');
         const btnDeckSave = document.getElementById('btn-deck-save');
-        const btnCreate = document.getElementById('btn-create');
         const btnJoin = document.getElementById('btn-join');
         const btnEndTurn = document.getElementById('btn-end-turn');
         const btnModeMove = document.getElementById('btn-mode-move');
@@ -157,38 +163,35 @@
         if(btnJoin) btnJoin.addEventListener('click', () => { const roomInput = document.getElementById('room-input'); const code = roomInput ? roomInput.value.trim().toUpperCase() : ''; if(code) socket.emit('joinRoom', { roomId: code, customDeck: myDeck }); });
         if(btnEndTurn) btnEndTurn.addEventListener('click', () => { if(currentRoomId) socket.emit('endTurn', currentRoomId); });
 
-        // 👟, ⚔️ 모드 변경 버튼 리스너 바인딩
+        // 🟢 / 🔴 버튼 상태 전환 바인딩 함수
         if(btnModeMove) btnModeMove.addEventListener('click', () => setActionMode('move'));
         if(btnModeAttack) btnModeAttack.addEventListener('click', () => setActionMode('attack'));
 
         function setActionMode(mode) {
-            if(!selectedSquare) return;
             currentMode = mode;
             btnModeMove.classList.toggle('mode-active', mode === 'move');
             btnModeAttack.classList.toggle('mode-active', mode === 'attack');
             
-            const piece = currentBoard[selectedSquare.y][selectedSquare.x];
-            if(piece) {
-                calculatePaths(selectedSquare.x, selectedSquare.y, piece);
+            if(selectedSquare) {
+                const piece = currentBoard[selectedSquare.y][selectedSquare.x];
+                if(piece) calculatePaths(selectedSquare.x, selectedSquare.y, piece);
             }
         }
 
-        socket.on('roomCreated', ({ roomId }) => { currentRoomId = roomId; myRole = 'A'; lobby.classList.add('hidden'); gameContainer.classList.remove('hidden'); const turnDisplay = document.getElementById('turn-display'); if(turnDisplay) turnDisplay.innerText = `방 코드: ${roomId} [상대방 접속 대기 중...]`; });
-        socket.on('gameStarted', ({ roomId, board, players, turn, db }) => { currentRoomId = roomId; pieceDB = db; if (!myRole) myRole = socket.id === players[0] ? 'A' : 'B'; lobby.classList.add('hidden'); deckEditor.classList.add('hidden'); gameContainer.classList.remove('hidden'); updateTurnHeader(turn); drawBoard(board); });
+        socket.on('roomCreated', ({ roomId }) => { currentRoomId = roomId; myRole = 'A'; lobby.classList.add('hidden'); gameContainer.classList.remove('hidden'); setActionMode('move'); });
+        socket.on('gameStarted', ({ roomId, board, players, turn, db }) => { currentRoomId = roomId; pieceDB = db; if (!myRole) myRole = socket.id === players[0] ? 'A' : 'B'; lobby.classList.add('hidden'); deckEditor.classList.add('hidden'); gameContainer.classList.remove('hidden'); updateTurnHeader(turn); setActionMode('move'); drawBoard(board); });
         socket.on('actionProcessed', ({ board, activePiece }) => { drawBoard(board); clearHighlights(); selectedSquare = activePiece; if(selectedSquare) { const cell = document.querySelector(`[data-x="${selectedSquare.x}"][data-y="${selectedSquare.y}"]`); if(cell) cell.classList.add('selected'); if(currentMode) setActionMode(currentMode); } });
         socket.on('turnSwapped', ({ turn, board }) => { updateTurnHeader(turn); drawBoard(board); clearState(); });
 
         function updateTurnHeader(turnId) { const turnDisplay = document.getElementById('turn-display'); if(turnDisplay) turnDisplay.innerText = socket.id === turnId ? "🟢 당신의 턴입니다!" : "🔴 상대방이 생각 중입니다..."; }
-        function clearState() { selectedSquare = null; currentMode = null; btnModeMove.classList.remove('mode-active'); btnModeAttack.classList.remove('mode-active'); clearHighlights(); }
+        function clearState() { selectedSquare = null; setActionMode('move'); clearHighlights(); }
 
-        // ♟️ 3번 핵심 요건: 내 기물이 언제나 아래로 보이도록 시점 렌더링 반전 연산
         function drawBoard(board) {
             currentBoard = board;
             const container = document.getElementById('chess-board');
             if(!container) return;
             container.innerHTML = '';
 
-            // B팀 시점(상대방)이면 배열 인덱스 역순(7->0)으로 돌려 180도 화면 반전 구현
             for (let i = 0; i < 8; i++) {
                 for (let j = 0; j < 8; j++) {
                     const y = myRole === 'B' ? i : 7 - i;
@@ -201,14 +204,14 @@
 
                     const p = board[y][x];
                     if (p) {
-                        // 상대 진영의 암살자/기사영혼 은신 기물 블라인드 처리
                         if (p.player !== myRole && p.stealth) {
-                            // 출력 건너뛰기
+                            // 은신 기물 블라인드 처리
                         } else {
                             const pDiv = document.createElement('div');
                             pDiv.className = `piece team-${p.player} ${p.stealth ? 'stealth' : ''} ${p.type === 'Bomb' ? 'bomb-p' : ''}`;
+                            
+                            // 🛠️ 4번 요구사항 반영: 더 이상 카운트 텍스트를 붙이지 않고 마스터 이름만 깔끔하게 출력
                             let displayName = pieceDB[p.type] ? pieceDB[p.type].name : p.type;
-                            if (p.type === 'Apprentice') displayName += `(${p.killCount}/2)`;
                             pDiv.innerText = displayName;
                             cell.appendChild(pDiv);
                         }
@@ -230,17 +233,19 @@
                 return;
             }
 
-            clearState();
-            const piece = currentBoard[y][x];
+            clearHighlights();
+            document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected'));
+            selectedSquare = null;
 
+            const piece = currentBoard[y][x];
             if (piece && piece.player === myRole && piece.type !== 'Bomb') {
                 selectedSquare = { x, y };
                 const selectedCell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
                 if(selectedCell) selectedCell.classList.add('selected');
+                calculatePaths(x, y, piece);
             }
         }
 
-        // 🗺️ 체스판 방향 매핑 연산 알고리즘 (기존 원본 완벽 준수)
         function calculatePaths(cx, cy, piece) {
             clearHighlights();
             const data = pieceDB[piece.type];
@@ -254,9 +259,9 @@
 
             const isTeamB = piece.player === 'B';
 
-            // 👟 1. 이동 하이라이트 연산
+            // 👟 이동 범위 하이라이트 연산
             if (currentMode === 'move') {
-                if (data.moveDirs.includes('L')) { // 나이트 L자 이동 예외 규격 검증
+                if (data.moveDirs.includes('L')) {
                     const knightMoves = [
                         {x:cx-1, y:cy-2}, {x:cx+1, y:cy-2}, {x:cx-2, y:cy-1}, {x:cx+2, y:cy-1},
                         {x:cx-2, y:cy+1}, {x:cx+2, y:cy+1}, {x:cx-1, y:cy+2}, {x:cx+1, y:cy+2}
@@ -290,7 +295,7 @@
                     });
                 }
             } 
-            // ⚔️ 2. 공격 하이라이트 연산
+            // ⚔️ 공격 범위 하이라이트 연산
             else if (currentMode === 'attack') {
                 if (data.attackDirs.includes('L')) {
                     const knightMoves = [
@@ -327,13 +332,13 @@
                 }
             }
 
-            // 시각적 드로우 활성화
+            // 렌더링 클래스 주입
             movableCells.forEach(c => { const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`); if(targetCell) targetCell.classList.add('movable'); });
             attackableCells.forEach(c => { const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`); if(targetCell) targetCell.classList.add('attackable'); });
         }
 
         function clearHighlights() {
-            document.querySelectorAll('.cell').forEach(c => { c.classList.remove('movable', 'attackable', 'selected'); });
+            document.querySelectorAll('.cell').forEach(c => { c.classList.remove('movable', 'attackable'); });
             movableCells = []; attackableCells = [];
         }
     </script>

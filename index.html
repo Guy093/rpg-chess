@@ -9,23 +9,20 @@
         .hidden { display: none !important; }
         button { background: #e74c3c; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; margin: 5px; transition: 0.2s; }
         button:hover { background: #c0392b; }
+        button.mode-active { background: #2ecc71 !important; box-shadow: 0 0 10px #2ecc71; }
         input { padding: 10px; font-size: 16px; border-radius: 6px; border: 1px solid #ddd; text-align: center; width: 150px; background: #fff; color: #000; }
         
-        /* 🗺️ 유저 스케치 반영 덱 에디터 스타일 */
         .editor-container { width: 500px; border: 3px solid #fff; border-radius: 8px; background: #1a1a1a; padding: 20px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .back-btn { position: absolute; top: 15px; left: 15px; font-size: 24px; cursor: pointer; background: none; border: none; color: white; margin: 0; padding: 0; }
         
-        /* 상단 장착 슬롯 (6칸) */
         .deck-slots { display: flex; gap: 10px; margin-top: 40px; margin-bottom: 5px; }
         .slot { width: 60px; height: 80px; border: 2px solid #fff; background: #2c3e50; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; position: relative; border-radius: 4px; box-sizing: border-box; }
         .slot-labels { display: flex; gap: 10px; margin-bottom: 20px; }
         .label { width: 60px; text-align: center; font-size: 13px; font-weight: bold; color: #f1c40f; }
         
-        /* 하단 기물 종류별 정렬 보관함 */
         .divider { width: 100%; border-top: 3px solid #fff; margin-bottom: 20px; }
         .pool-container { width: 95%; height: 260px; border: 2px solid #fff; background: #222; padding: 10px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-content: flex-start; box-sizing: border-box; }
         
-        /* 드래그 기물 카드 */
         .piece-card { width: 60px; height: 80px; background: #34495e; border: 1px solid #7f8c8d; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; cursor: grab; box-sizing: border-box; }
         .piece-card:active { cursor: grabbing; }
         .piece-card .tier { font-size: 8px; color: #bdc3c7; margin-top: 4px; }
@@ -36,17 +33,19 @@
         .white { background: #f0d9b5; color: #b58863; }
         .black { background: #b58863; color: #f0d9b5; }
         
-        /* 기물 상태별 데코레이션 효과 */
-        .piece { width: 90%; height: 90%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); }
+        .piece { width: 90%; height: 90%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); font-size: 11px; }
         .piece.team-A { background: #2980b9; color: #fff; box-shadow: inset 0 0 8px #1f4f75; }
         .piece.team-B { background: #d35400; color: #fff; box-shadow: inset 0 0 8px #823400; }
-        .piece.stealth { opacity: 0.4; border: 2px dashed #f1c40f !important; }
+        .piece.stealth { opacity: 0.15; border: 2px dashed #f1c40f !important; }
         .piece.bomb-p { background: #2c3e50 !important; border: 2px solid #e74c3c !important; animation: blink 1s infinite alternate; }
         
-        /* 이동 및 공격 범위 하이라이트 */
+        /* 인디케이터 클래스 */
         .cell.movable::after { content: ''; position: absolute; width: 20px; height: 20px; background: rgba(52, 152, 219, 0.7); border-radius: 50%; }
         .cell.attackable { box-shadow: inset 0 0 15px rgba(231, 76, 60, 0.9); border: 2px solid #e74c3c; }
         .cell.selected { border: 3px solid #f1c40f; }
+
+        .control-panel { display: flex; gap: 10px; width: 524px; margin-top: 10px; }
+        .control-panel button { flex: 1; font-weight: bold; }
 
         @keyframes blink { from { opacity: 0.6; } to { opacity: 1; } }
     </style>
@@ -65,7 +64,6 @@
     <div id="deck-editor" class="hidden">
         <div class="editor-container">
             <button class="back-btn" id="btn-deck-close">⬅️</button>
-            
             <div class="deck-slots">
                 <div class="slot" data-index="0" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
                 <div class="slot" data-index="1" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
@@ -74,20 +72,11 @@
                 <div class="slot" data-index="4" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
                 <div class="slot" data-index="5" ondrop="drop(event)" ondragover="allowDrop(event)">Empty</div>
             </div>
-            
             <div class="slot-labels">
-                <div class="label">폰</div>
-                <div class="label">나이트</div>
-                <div class="label">룩</div>
-                <div class="label">비숍</div>
-                <div class="label">퀸</div>
-                <div class="label">킹</div>
+                <div class="label">폰</div><div class="label">나이트</div><div class="label">룩</div><div class="label">비숍</div><div class="label">퀸</div><div class="label">킹</div>
             </div>
-
             <div class="divider"></div>
-
             <div class="pool-container" id="pool-list"></div>
-            
             <button id="btn-deck-save" style="margin-top:15px; width:100%; background:#2ecc71;">조합 저장 및 확정</button>
         </div>
     </div>
@@ -95,19 +84,20 @@
     <div id="game-container" class="hidden">
         <h3 id="turn-display">상대방 대기 중...</h3>
         <div class="board" id="chess-board"></div>
-        <button id="btn-end-turn" style="width:524px; background:#34495e;">⚔️ 턴 종료하기</button>
+        
+        <div class="control-panel">
+            <button id="btn-mode-move">👟 이동 모드</button>
+            <button id="btn-mode-attack" style="background:#c0392b;">⚔️ 공격 모드</button>
+            <button id="btn-end-turn" style="background:#34495e;">⏳ 턴 종료하기</button>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // 소켓 라이브러리 정상 로드 체크 안전장치
-        if (typeof io === 'undefined') {
-            alert("경고: Socket.io 서버 라이브러리가 로드되지 않았습니다. server.js 가 정상 작동 중인지 확인하세요.");
-        }
-
         const socket = io();
         let currentRoomId = null;
         let selectedSquare = null;
+        let currentMode = null; // 'move' 또는 'attack'
         let movableCells = [];
         let attackableCells = [];
         let pieceDB = {};
@@ -115,7 +105,6 @@
         let myRole = null;
 
         let myDeck = ['Pawn', 'Mercenary', 'Assassin', 'Berserker', 'RushWarrior', 'Apprentice'];
-        
         const CLIENT_DB = {
             'Pawn': '병사', 'Mercenary': '용병', 'Assassin': '암살자', 'Berserker': '광전사',
             'RushWarrior': '돌격병', 'Apprentice': '견습생', 'SuicideBomber': '자살폭탄', 'GhostKnight': '기사영혼'
@@ -125,13 +114,14 @@
         const deckEditor = document.getElementById('deck-editor');
         const gameContainer = document.getElementById('game-container');
 
-        // 🛠️ 버튼 엘리먼트 존재 여부를 완벽히 체크하여 스크립트 정지 방지
         const btnDeckOpen = document.getElementById('btn-deck-open');
         const btnDeckClose = document.getElementById('btn-deck-close');
         const btnDeckSave = document.getElementById('btn-deck-save');
         const btnCreate = document.getElementById('btn-create');
         const btnJoin = document.getElementById('btn-join');
         const btnEndTurn = document.getElementById('btn-end-turn');
+        const btnModeMove = document.getElementById('btn-mode-move');
+        const btnModeAttack = document.getElementById('btn-mode-attack');
 
         if(btnDeckOpen) btnDeckOpen.addEventListener('click', () => { lobby.classList.add('hidden'); deckEditor.classList.remove('hidden'); renderEditor(); });
         if(btnDeckClose) btnDeckClose.addEventListener('click', () => { deckEditor.classList.add('hidden'); lobby.classList.remove('hidden'); });
@@ -143,9 +133,7 @@
             poolList.innerHTML = '';
             Object.keys(CLIENT_DB).forEach(key => {
                 const card = document.createElement('div');
-                card.className = 'piece-card';
-                card.draggable = true;
-                card.id = `drag-${key}`;
+                card.className = 'piece-card'; card.draggable = true; card.id = `drag-${key}`;
                 card.innerHTML = `<div style="font-weight:bold;">${CLIENT_DB[key]}</div><div class="tier">${key}</div>`;
                 card.addEventListener('dragstart', (e) => { e.dataTransfer.setData("text/plain", key); });
                 poolList.appendChild(card);
@@ -163,64 +151,49 @@
         }
 
         function allowDrop(e) { e.preventDefault(); }
-        
-        function drop(e) {
-            e.preventDefault();
-            const pieceType = e.dataTransfer.getData("text/plain") || e.dataTransfer.getData("text");
-            const slot = e.target.closest('.slot');
-            if (slot && pieceType) {
-                const idx = slot.getAttribute('data-index');
-                myDeck[idx] = pieceType;
-                updateSlotUI();
-            }
-        }
+        function drop(e) { e.preventDefault(); const pieceType = e.dataTransfer.getData("text/plain") || e.dataTransfer.getData("text"); const slot = e.target.closest('.slot'); if (slot && pieceType) { const idx = slot.getAttribute('data-index'); myDeck[idx] = pieceType; updateSlotUI(); } }
 
         if(btnCreate) btnCreate.addEventListener('click', () => { socket.emit('createRoom', { customDeck: myDeck }); });
-        if(btnJoin) btnJoin.addEventListener('click', () => {
-            const roomInput = document.getElementById('room-input');
-            const code = roomInput ? roomInput.value.trim().toUpperCase() : '';
-            if(code) socket.emit('joinRoom', { roomId: code, customDeck: myDeck });
-        });
+        if(btnJoin) btnJoin.addEventListener('click', () => { const roomInput = document.getElementById('room-input'); const code = roomInput ? roomInput.value.trim().toUpperCase() : ''; if(code) socket.emit('joinRoom', { roomId: code, customDeck: myDeck }); });
         if(btnEndTurn) btnEndTurn.addEventListener('click', () => { if(currentRoomId) socket.emit('endTurn', currentRoomId); });
 
-        socket.on('roomCreated', ({ roomId }) => {
-            currentRoomId = roomId;
-            myRole = 'A'; 
-            lobby.classList.add('hidden');
-            gameContainer.classList.remove('hidden');
-            const turnDisplay = document.getElementById('turn-display');
-            if(turnDisplay) turnDisplay.innerText = `방 코드: ${roomId} [상대방 접속 대기 중...]`;
-        });
+        // 👟, ⚔️ 모드 변경 버튼 리스너 바인딩
+        if(btnModeMove) btnModeMove.addEventListener('click', () => setActionMode('move'));
+        if(btnModeAttack) btnModeAttack.addEventListener('click', () => setActionMode('attack'));
 
-        socket.on('gameStarted', ({ roomId, board, players, turn, db }) => {
-            currentRoomId = roomId;
-            pieceDB = db;
-            if (!myRole) {
-                myRole = socket.id === players[0] ? 'A' : 'B';
+        function setActionMode(mode) {
+            if(!selectedSquare) return;
+            currentMode = mode;
+            btnModeMove.classList.toggle('mode-active', mode === 'move');
+            btnModeAttack.classList.toggle('mode-active', mode === 'attack');
+            
+            const piece = currentBoard[selectedSquare.y][selectedSquare.x];
+            if(piece) {
+                calculatePaths(selectedSquare.x, selectedSquare.y, piece);
             }
-            lobby.classList.add('hidden');
-            deckEditor.classList.add('hidden');
-            gameContainer.classList.remove('hidden');
-            updateTurnHeader(turn);
-            drawBoard(board);
-        });
-
-        socket.on('actionProcessed', ({ board, activePiece }) => { drawBoard(board); clearHighlights(); selectedSquare = activePiece; });
-        socket.on('turnSwapped', ({ turn, board }) => { updateTurnHeader(turn); drawBoard(board); clearHighlights(); selectedSquare = null; });
-
-        function updateTurnHeader(turnId) {
-            const turnDisplay = document.getElementById('turn-display');
-            if(turnDisplay) turnDisplay.innerText = socket.id === turnId ? "🟢 당신의 턴입니다!" : "🔴 상대방이 생각 중입니다...";
         }
 
+        socket.on('roomCreated', ({ roomId }) => { currentRoomId = roomId; myRole = 'A'; lobby.classList.add('hidden'); gameContainer.classList.remove('hidden'); const turnDisplay = document.getElementById('turn-display'); if(turnDisplay) turnDisplay.innerText = `방 코드: ${roomId} [상대방 접속 대기 중...]`; });
+        socket.on('gameStarted', ({ roomId, board, players, turn, db }) => { currentRoomId = roomId; pieceDB = db; if (!myRole) myRole = socket.id === players[0] ? 'A' : 'B'; lobby.classList.add('hidden'); deckEditor.classList.add('hidden'); gameContainer.classList.remove('hidden'); updateTurnHeader(turn); drawBoard(board); });
+        socket.on('actionProcessed', ({ board, activePiece }) => { drawBoard(board); clearHighlights(); selectedSquare = activePiece; if(selectedSquare) { const cell = document.querySelector(`[data-x="${selectedSquare.x}"][data-y="${selectedSquare.y}"]`); if(cell) cell.classList.add('selected'); if(currentMode) setActionMode(currentMode); } });
+        socket.on('turnSwapped', ({ turn, board }) => { updateTurnHeader(turn); drawBoard(board); clearState(); });
+
+        function updateTurnHeader(turnId) { const turnDisplay = document.getElementById('turn-display'); if(turnDisplay) turnDisplay.innerText = socket.id === turnId ? "🟢 당신의 턴입니다!" : "🔴 상대방이 생각 중입니다..."; }
+        function clearState() { selectedSquare = null; currentMode = null; btnModeMove.classList.remove('mode-active'); btnModeAttack.classList.remove('mode-active'); clearHighlights(); }
+
+        // ♟️ 3번 핵심 요건: 내 기물이 언제나 아래로 보이도록 시점 렌더링 반전 연산
         function drawBoard(board) {
             currentBoard = board;
             const container = document.getElementById('chess-board');
             if(!container) return;
             container.innerHTML = '';
 
-            for (let y = 0; y < 8; y++) {
-                for (let x = 0; x < 8; x++) {
+            // B팀 시점(상대방)이면 배열 인덱스 역순(7->0)으로 돌려 180도 화면 반전 구현
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) {
+                    const y = myRole === 'B' ? i : 7 - i;
+                    const x = myRole === 'B' ? 7 - j : j;
+
                     const cell = document.createElement('div');
                     cell.className = `cell ${(y + x) % 2 === 0 ? 'white' : 'black'}`;
                     cell.setAttribute('data-x', x);
@@ -228,12 +201,17 @@
 
                     const p = board[y][x];
                     if (p) {
-                        const pDiv = document.createElement('div');
-                        pDiv.className = `piece team-${p.player} ${p.stealth ? 'stealth' : ''} ${p.type === 'Bomb' ? 'bomb-p' : ''}`;
-                        let displayName = pieceDB[p.type] ? pieceDB[p.type].name : p.type;
-                        if (p.type === 'Apprentice') displayName += `(${p.killCount}/2)`;
-                        pDiv.innerText = displayName;
-                        cell.appendChild(pDiv);
+                        // 상대 진영의 암살자/기사영혼 은신 기물 블라인드 처리
+                        if (p.player !== myRole && p.stealth) {
+                            // 출력 건너뛰기
+                        } else {
+                            const pDiv = document.createElement('div');
+                            pDiv.className = `piece team-${p.player} ${p.stealth ? 'stealth' : ''} ${p.type === 'Bomb' ? 'bomb-p' : ''}`;
+                            let displayName = pieceDB[p.type] ? pieceDB[p.type].name : p.type;
+                            if (p.type === 'Apprentice') displayName += `(${p.killCount}/2)`;
+                            pDiv.innerText = displayName;
+                            cell.appendChild(pDiv);
+                        }
                     }
 
                     cell.addEventListener('click', () => handleCellClick(x, y));
@@ -243,27 +221,28 @@
         }
 
         function handleCellClick(x, y) {
-            if (movableCells.some(c => c.x === x && c.y === y)) {
+            if (currentMode === 'move' && movableCells.some(c => c.x === x && c.y === y)) {
                 socket.emit('actionMove', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
                 return;
             }
-            if (attackableCells.some(c => c.x === x && c.y === y)) {
+            if (currentMode === 'attack' && attackableCells.some(c => c.x === x && c.y === y)) {
                 socket.emit('actionAttack', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
                 return;
             }
 
-            clearHighlights();
+            clearState();
             const piece = currentBoard[y][x];
 
-            if (piece && piece.player === myRole) {
+            if (piece && piece.player === myRole && piece.type !== 'Bomb') {
                 selectedSquare = { x, y };
                 const selectedCell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
                 if(selectedCell) selectedCell.classList.add('selected');
-                calculatePaths(x, y, piece);
             }
         }
 
+        // 🗺️ 체스판 방향 매핑 연산 알고리즘 (기존 원본 완벽 준수)
         function calculatePaths(cx, cy, piece) {
+            clearHighlights();
             const data = pieceDB[piece.type];
             if (!data) return;
 
@@ -274,66 +253,88 @@
             };
 
             const isTeamB = piece.player === 'B';
-            let rangeM = data.moveRange;
-            if (piece.type === 'Pawn' && piece.isFirstMove) rangeM = 2;
 
-            data.moveDirs.forEach(d => {
-                let offset = dirMap[d];
-                if (!offset) return;
-                let stepX = offset.x;
-                let stepY = isTeamB ? offset.y : -offset.y;
-
-                for (let r = 1; r <= rangeM; r++) {
-                    let tx = cx + stepX * r;
-                    let ty = cy + stepY * r;
-                    if (tx < 0 || tx > 7 || ty < 0 || ty > 7) break;
-
-                    const target = currentBoard[ty][tx];
-                    if (!target || target.type === 'Bomb') {
-                        movableCells.push({ x: tx, y: ty });
-                    } else {
-                        break; 
-                    }
-                }
-            });
-
-            data.attackDirs.forEach(d => {
-                let offset = dirMap[d];
-                if (!offset) return;
-                let stepX = offset.x;
-                let stepY = isTeamB ? offset.y : -offset.y;
-
-                for (let r = 1; r <= data.attackRange; r++) {
-                    let tx = cx + stepX * r;
-                    let ty = cy + stepY * r;
-                    if (tx < 0 || tx > 7 || ty < 0 || ty > 7) break;
-
-                    const target = currentBoard[ty][tx];
-                    if (target) {
-                        if (target.player !== piece.player && !target.stealth && target.type !== 'Bomb') {
-                            attackableCells.push({ x: tx, y: ty });
+            // 👟 1. 이동 하이라이트 연산
+            if (currentMode === 'move') {
+                if (data.moveDirs.includes('L')) { // 나이트 L자 이동 예외 규격 검증
+                    const knightMoves = [
+                        {x:cx-1, y:cy-2}, {x:cx+1, y:cy-2}, {x:cx-2, y:cy-1}, {x:cx+2, y:cy-1},
+                        {x:cx-2, y:cy+1}, {x:cx+2, y:cy+1}, {x:cx-1, y:cy+2}, {x:cx+1, y:cy+2}
+                    ];
+                    knightMoves.forEach(m => {
+                        if (m.x >= 0 && m.x < 8 && m.y >= 0 && m.y < 8) {
+                            const target = currentBoard[m.y][m.x];
+                            if (!target || target.type === 'Bomb') movableCells.push(m);
                         }
-                        break;
-                    }
-                }
-            });
+                    });
+                } else {
+                    let rangeM = data.moveRange;
+                    if (piece.type === 'Pawn' && piece.isFirstMove) rangeM = 2;
 
-            movableCells.forEach(c => {
-                const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`);
-                if(targetCell) targetCell.classList.add('movable');
-            });
-            attackableCells.forEach(c => {
-                const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`);
-                if(targetCell) targetCell.classList.add('attackable');
-            });
+                    data.moveDirs.forEach(d => {
+                        let offset = dirMap[d]; if (!offset) return;
+                        let stepX = offset.x;
+                        let stepY = isTeamB ? offset.y : -offset.y;
+
+                        for (let r = 1; r <= rangeM; r++) {
+                            let tx = cx + stepX * r; let ty = cy + stepY * r;
+                            if (tx < 0 || tx > 7 || ty < 0 || ty > 7) break;
+
+                            const target = currentBoard[ty][tx];
+                            if (!target || target.type === 'Bomb') {
+                                movableCells.push({ x: tx, y: ty });
+                            } else {
+                                break; 
+                            }
+                        }
+                    });
+                }
+            } 
+            // ⚔️ 2. 공격 하이라이트 연산
+            else if (currentMode === 'attack') {
+                if (data.attackDirs.includes('L')) {
+                    const knightMoves = [
+                        {x:cx-1, y:cy-2}, {x:cx+1, y:cy-2}, {x:cx-2, y:cy-1}, {x:cx+2, y:cy-1},
+                        {x:cx-2, y:cy+1}, {x:cx+2, y:cy+1}, {x:cx-1, y:cy+2}, {x:cx+1, y:cy+2}
+                    ];
+                    knightMoves.forEach(m => {
+                        if (m.x >= 0 && m.x < 8 && m.y >= 0 && m.y < 8) {
+                            const target = currentBoard[m.y][m.x];
+                            if (target && target.player !== piece.player && !target.stealth && target.type !== 'Bomb') {
+                                attackableCells.push(m);
+                            }
+                        }
+                    });
+                } else {
+                    data.attackDirs.forEach(d => {
+                        let offset = dirMap[d]; if (!offset) return;
+                        let stepX = offset.x;
+                        let stepY = isTeamB ? offset.y : -offset.y;
+
+                        for (let r = 1; r <= data.attackRange; r++) {
+                            let tx = cx + stepX * r; let ty = cy + stepY * r;
+                            if (tx < 0 || tx > 7 || ty < 0 || ty > 7) break;
+
+                            const target = currentBoard[ty][tx];
+                            if (target) {
+                                if (target.player !== piece.player && !target.stealth && target.type !== 'Bomb') {
+                                    attackableCells.push({ x: tx, y: ty });
+                                }
+                                break;
+                            }
+                        }
+                    });
+                }
+            }
+
+            // 시각적 드로우 활성화
+            movableCells.forEach(c => { const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`); if(targetCell) targetCell.classList.add('movable'); });
+            attackableCells.forEach(c => { const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`); if(targetCell) targetCell.classList.add('attackable'); });
         }
 
         function clearHighlights() {
-            document.querySelectorAll('.cell').forEach(c => {
-                c.classList.remove('movable', 'attackable', 'selected');
-            });
-            movableCells = [];
-            attackableCells = [];
+            document.querySelectorAll('.cell').forEach(c => { c.classList.remove('movable', 'attackable', 'selected'); });
+            movableCells = []; attackableCells = [];
         }
     </script>
 </body>

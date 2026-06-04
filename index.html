@@ -48,6 +48,11 @@
 
         .control-panel { display: flex; gap: 10px; width: 524px; margin-top: 10px; }
         .control-panel button { flex: 1; }
+        
+        /* 복사 영역 래퍼 */
+        .code-container { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+        .btn-copy { background: #34495e; font-size: 12px; padding: 4px 8px; margin: 0; border-radius: 4px; }
+        .btn-copy:hover { background: #465866; }
 
         @keyframes blink { from { opacity: 0.6; } to { opacity: 1; } }
     </style>
@@ -84,7 +89,9 @@
     </div>
 
     <div id="game-container" class="hidden">
-        <h3 id="turn-display">상대방 대기 중...</h3>
+        <div id="room-info-wrapper" class="code-container">
+            <h3 id="turn-display" style="margin: 0;">상대방 대기 중...</h3>
+        </div>
         <div class="board" id="chess-board"></div>
         
         <div class="control-panel">
@@ -156,7 +163,7 @@
         function drop(e) { e.preventDefault(); const pieceType = e.dataTransfer.getData("text/plain") || e.dataTransfer.getData("text"); const slot = e.target.closest('.slot'); if (slot && pieceType) { const idx = slot.getAttribute('data-index'); myDeck[idx] = pieceType; updateSlotUI(); } }
 
         if(btnCreate) btnCreate.addEventListener('click', () => { socket.emit('createRoom', { customDeck: myDeck }); });
-        if(btnJoin) btnJoin.addEventListener('click', () => { const roomInput = document.getElementById('room-input'); const code = roomInput ? roomInput.value.trim().toUpperCase() : ''; if(code) socket.emit('joinRoom', { roomId: code, customDeck: myDeck }); });
+        if(btnJoin) btnJoin.addEventListener('click', () => { const roomInput = document.getElementById('room-input'); const code = roomInput ? roomInput.value.trim() : ''; if(code) socket.emit('joinRoom', { roomId: code, customDeck: myDeck }); });
         if(btnEndTurn) btnEndTurn.addEventListener('click', () => { if(currentRoomId) socket.emit('endTurn', currentRoomId); });
 
         if(btnModeMove) btnModeMove.addEventListener('click', () => setActionMode('move'));
@@ -169,23 +176,54 @@
             
             if(selectedSquare) {
                 const piece = currentBoard[selectedSquare.y][selectedSquare.x];
-                if(piece) calculatePaths(selectedSquare.x, selectedSquare.y, piece);
+                if(piece && piece.player === myRole) calculatePaths(selectedSquare.x, selectedSquare.y, piece);
             }
         }
 
+        // 🛠️ 방 생성 시 숫자 8자리 코드 표시 및 복사 버튼 붙이기
         socket.on('roomCreated', ({ roomId }) => { 
             currentRoomId = roomId; 
             myRole = 'A'; 
             lobby.classList.add('hidden'); 
             gameContainer.classList.remove('hidden'); 
+            
             const turnDisplay = document.getElementById('turn-display');
             if(turnDisplay) turnDisplay.innerText = `방 코드: ${roomId} (상대방 대기 중)`;
+            
+            // 복사 버튼 동적 생성 (중복 방지)
+            const wrapper = document.getElementById('room-info-wrapper');
+            if(wrapper && !document.getElementById('btn-code-copy')) {
+                const copyBtn = document.createElement('button');
+                copyBtn.id = 'btn-code-copy';
+                copyBtn.className = 'btn-copy';
+                copyBtn.innerText = '복사';
+                copyBtn.onclick = () => {
+                    navigator.clipboard.writeText(roomId).then(() => {
+                        alert('방 코드가 복사되었습니다!');
+                    });
+                };
+                wrapper.appendChild(copyBtn);
+            }
             setActionMode('move'); 
         });
 
-        socket.on('gameStarted', ({ roomId, board, players, turn, db }) => { currentRoomId = roomId; pieceDB = db; if (!myRole) myRole = socket.id === players[0] ? 'A' : 'B'; lobby.classList.add('hidden'); deckEditor.classList.add('hidden'); gameContainer.classList.remove('hidden'); updateTurnHeader(turn); setActionMode('move'); drawBoard(board); });
-        
-        // 🛠️ 버그 수정: 행동 처리 후 자동으로 공격 모드로 넘겨주는 동적 흐름 제어
+        socket.on('gameStarted', ({ roomId, board, players, turn, db }) => { 
+            currentRoomId = roomId; 
+            pieceDB = db; 
+            if (!myRole) myRole = socket.id === players[0] ? 'A' : 'B'; 
+            lobby.classList.add('hidden'); 
+            deckEditor.classList.add('hidden'); 
+            gameContainer.classList.remove('hidden'); 
+            
+            // 게임 시작하면 복사 버튼 삭제하고 상단 텍스트 정상 전환
+            const copyBtn = document.getElementById('btn-code-copy');
+            if(copyBtn) copyBtn.remove();
+            
+            updateTurnHeader(turn); 
+            setActionMode('move'); 
+            drawBoard(board); 
+        });
+
         socket.on('actionProcessed', ({ board, activePiece }) => { 
             drawBoard(board); 
             clearHighlights(); 
@@ -194,29 +232,31 @@
             selectedSquare = activePiece; 
 
             if(selectedSquare) { 
-                const cell = document.querySelector(`[data-x="${selectedSquare.x}"][data-y="${selectedSquare.y}"]`); 
-                if(cell) cell.classList.add('selected'); 
-
                 const piece = currentBoard[selectedSquare.y][selectedSquare.x];
                 
-                // 이동 조작 직후였고, 돌격병(RushWarrior)이 아니거나 돌격병이 조작 횟수를 다 채운 경우 자동으로 공격 모드 전환
-                if (currentMode === 'move' && prevSelected && (selectedSquare.x !== prevSelected.x || selectedSquare.y !== prevSelected.y)) {
-                    if (piece && piece.type === 'RushWarrior') {
-                        // 돌격병의 대시 카운트가 살아있는 상태(moveCount 가 보드 데이터 등에 남는 구조)가 아니라면 서버 기준 판정
-                        // 기본적으로 움직인 직후 activePiece가 남았으나 돌격병이 추가 이동 가능하면 move 유지, 끝났으면 attack
-                        if (piece.moveCount >= 2 || piece.actionDone) { 
-                            setActionMode('attack');
+                // 내 기물일 때만 선택 테두리 래핑 활성화
+                if(piece && piece.player === myRole) {
+                    const cell = document.querySelector(`[data-x="${selectedSquare.x}"][data-y="${selectedSquare.y}"]`); 
+                    if(cell) cell.classList.add('selected'); 
+
+                    if (currentMode === 'move' && prevSelected && (selectedSquare.x !== prevSelected.x || selectedSquare.y !== prevSelected.y)) {
+                        if (piece.type === 'RushWarrior') {
+                            if (piece.moveCount >= 2 || piece.actionDone) { 
+                                setActionMode('attack');
+                            } else {
+                                setActionMode('move'); 
+                            }
                         } else {
-                            setActionMode('move'); 
+                            setActionMode('attack');
                         }
                     } else {
-                        setActionMode('attack');
+                        setActionMode(currentMode); 
                     }
                 } else {
-                    setActionMode(currentMode); 
+                    selectedSquare = null;
+                    setActionMode('move');
                 }
             } else {
-                // 기물 선택이 풀린 경우 (행동이 완전히 종료되어 해제된 경우 등) 기본 모드인 이동으로 복귀
                 setActionMode('move');
             }
         });
@@ -267,8 +307,6 @@
             }
             if (currentMode === 'attack' && attackableCells.some(c => c.x === x && c.y === y)) {
                 socket.emit('actionAttack', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
-                
-                // 공격 연산이 가동되면 다음 액션을 위해 기본 모드를 이동으로 원위치
                 setTimeout(() => { setActionMode('move'); selectedSquare = null; clearHighlights(); }, 100);
                 return;
             }
@@ -278,6 +316,7 @@
             selectedSquare = null;
 
             const piece = currentBoard[y][x];
+            // 🛠️ 1번 요구사항 수정: 내 기물(piece.player === myRole)일 때만 아웃라인 및 사거리 연산 실행
             if (piece && piece.player === myRole && piece.type !== 'Bomb') {
                 selectedSquare = { x, y };
                 const selectedCell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
@@ -288,6 +327,8 @@
 
         function calculatePaths(cx, cy, piece) {
             clearHighlights();
+            if (piece.player !== myRole) return; // 한번 더 안전장치 추가 (내 기물만 연산)
+
             const data = pieceDB[piece.type];
             if (!data) return;
 
@@ -299,7 +340,6 @@
 
             const isTeamB = piece.player === 'B';
 
-            // 👟 이동 범위 연산: 장애물(기물)이 있으면 진진경로 차단
             if (currentMode === 'move') {
                 if (data.moveDirs.includes('L')) {
                     const knightMoves = [
@@ -335,7 +375,6 @@
                     });
                 }
             } 
-            // ⚔️ 공격 범위 연산 수정: 사거리 내에 장애물이 있든 없든 사거리 내의 모든 공격 지점을 표시
             else if (currentMode === 'attack') {
                 if (data.attackDirs.includes('L')) {
                     const knightMoves = [
@@ -345,7 +384,6 @@
                     knightMoves.forEach(m => {
                         if (m.x >= 0 && m.x < 8 && m.y >= 0 && m.y < 8) {
                             const target = currentBoard[m.y][m.x];
-                            // 폭탄을 제외하고 상대 유닛 조준 가능 여부와 무관하게 전역 궤적 노출
                             if (!target || (target.player !== piece.player && !target.stealth && target.type !== 'Bomb')) {
                                 attackableCells.push(m);
                             }
@@ -361,7 +399,6 @@
                             let tx = cx + stepX * r; let ty = cy + stepY * r;
                             if (tx < 0 || tx > 7 || ty < 0 || ty > 7) break;
 
-                            // 중간 장애물 검사를 건너뛰어 사거리 내 모든 사선/직선 칸을 하이라이트 처리
                             const target = currentBoard[ty][tx];
                             if (!target || (target.player !== piece.player && !target.stealth && target.type !== 'Bomb')) {
                                 attackableCells.push({ x: tx, y: ty });

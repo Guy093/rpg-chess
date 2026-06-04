@@ -54,7 +54,12 @@ function createInitialBoard(deckA, deckB) {
 
 io.on('connection', (socket) => {
     socket.on('createRoom', ({ customDeck }) => {
-        const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
+        // 🛠️ 버그 수정: 클라이언트와 호환되도록 숫자 8자리 코드 난수 생성 시스템 구축
+        let roomId = '';
+        for (let i = 0; i < 8; i++) {
+            roomId += Math.floor(Math.random() * 10).toString();
+        }
+
         games[roomId] = { 
             players: [socket.id], 
             decks: { [socket.id]: customDeck }, 

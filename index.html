@@ -103,7 +103,7 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
+       const socket = io();
         let currentRoomId = null;
         let selectedSquare = null;
         let currentMode = 'move'; 
@@ -112,6 +112,7 @@
         let pieceDB = {};
         let currentBoard = [];
         let myRole = null;
+        let isMyTurn = false; // 내 턴 여부 추적
 
         let myDeck = ['Pawn', 'Mercenary', 'Assassin', 'Berserker', 'RushWarrior', 'Apprentice'];
         const CLIENT_DB = {
@@ -164,10 +165,12 @@
 
         if(btnCreate) btnCreate.addEventListener('click', () => { socket.emit('createRoom', { customDeck: myDeck }); });
         if(btnJoin) btnJoin.addEventListener('click', () => { const roomInput = document.getElementById('room-input'); const code = roomInput ? roomInput.value.trim() : ''; if(code) socket.emit('joinRoom', { roomId: code, customDeck: myDeck }); });
-        if(btnEndTurn) btnEndTurn.addEventListener('click', () => { if(currentRoomId) socket.emit('endTurn', currentRoomId); });
+        
+        // 🛠️ 턴종료 버튼 클릭 시 확실하게 룸 ID를 실어 서버로 전송
+        if(btnEndTurn) btnEndTurn.addEventListener('click', () => { if(currentRoomId && isMyTurn) socket.emit('endTurn', currentRoomId); });
 
-        if(btnModeMove) btnModeMove.addEventListener('click', () => setActionMode('move'));
-        if(btnModeAttack) btnModeAttack.addEventListener('click', () => setActionMode('attack'));
+        if(btnModeMove) btnModeMove.addEventListener('click', () => { if(!btnModeMove.disabled) setActionMode('move'); });
+        if(btnModeAttack) btnModeAttack.addEventListener('click', () => { if(!btnModeAttack.disabled) setActionMode('attack'); });
 
         function setActionMode(mode) {
             currentMode = mode;
@@ -196,9 +199,7 @@
                 copyBtn.className = 'btn-copy';
                 copyBtn.innerText = '복사';
                 copyBtn.onclick = () => {
-                    navigator.clipboard.writeText(roomId).then(() => {
-                        alert('방 코드가 복사되었습니다!');
-                    });
+                    navigator.clipboard.writeText(roomId).then(() => { alert('방 코드가 복사되었습니다!'); });
                 };
                 wrapper.appendChild(copyBtn);
             }
@@ -217,56 +218,95 @@
             if(copyBtn) copyBtn.remove();
             
             updateTurnHeader(turn); 
-            setActionMode('move'); 
             drawBoard(board); 
         });
 
-        // 🛠️ 2번 버그 수정 파트: 서버 행동 데이터 처리 및 동기화 흐름 완벽 안정화
-        socket.on('actionProcessed', ({ board, activePiece }) => { 
+        // 🛠️ 행동 처리 동기화 및 버튼 비활성화 상태 추적 관리
+        socket.on('actionProcessed', ({ board, hasMoved, hasAttacked, activePiece }) => { 
             drawBoard(board); 
             clearHighlights(); 
             
+            if (!isMyTurn) return; // 내 턴이 아닐 때는 연산 스킵
+
+            // 서버 상태 기반 버튼 제어 적용
+            btnModeMove.disabled = hasMoved;
+            btnModeAttack.disabled = hasAttacked;
+
+            // 기회가 끝난 모드의 활성화 테두리 클래스 제거 및 스타일 보정
+            if (hasMoved) btnModeMove.classList.remove('mode-active');
+            if (hasAttacked) btnModeAttack.classList.remove('mode-active');
+
             let prevSelected = selectedSquare;
-            // 서버가 준 다음 활성화 기물 좌표를 안전하게 매핑
             selectedSquare = activePiece ? { x: activePiece.x, y: activePiece.y } : null; 
 
             if(selectedSquare) { 
                 const piece = currentBoard[selectedSquare.y][selectedSquare.x];
                 
-                // 내 기물이 정상적으로 존재할 때만 후속 상태 및 UI 연산 유지
                 if(piece && piece.player === myRole) {
                     const cell = document.querySelector(`[data-x="${selectedSquare.x}"][data-y="${selectedSquare.y}"]`); 
                     if(cell) cell.classList.add('selected'); 
 
-                    // 돌격병 등의 연속 이동/공격에 따른 모드 자동 변환 제어
-                    if (currentMode === 'move' && prevSelected && (selectedSquare.x !== prevSelected.x || selectedSquare.y !== prevSelected.y)) {
-                        if (piece.type === 'RushWarrior') {
-                            // 서버 데이터 검증 기반 상태 판단 (더 이상 이동할 수 없으면 공격으로 토글)
-                            if (piece.moveCount >= 2 || piece.actionDone) { 
-                                setActionMode('attack');
-                            } else {
-                                setActionMode('move'); 
-                            }
-                        } else {
-                            setActionMode('attack');
-                        }
-                    } else {
-                        setActionMode(currentMode); 
+                    // 이동 기회가 남아있고 방금 이동한 게 아니라면 현재 모드 유지, 이동이 끝났다면 공격 모드로 자동 유도
+                    if (!hasMoved) {
+                        setActionMode('move');
+                    } else if (!hasAttacked) {
+                        setActionMode('attack');
                     }
                 } else {
-                    // 예외 케이스 처리: 내 기물이 아니라면 강제 선택 해제 및 락 방지
                     selectedSquare = null;
-                    setActionMode('move');
+                    autoSelectDefaultMode(hasMoved, hasAttacked);
                 }
             } else {
-                setActionMode('move');
+                autoSelectDefaultMode(hasMoved, hasAttacked);
+            }
+
+            // 🛠️ 이동과 공격을 모두 소진했다면 서버에 턴 종료 패킷 요청 유도
+            if (hasMoved && hasAttacked) {
+                socket.emit('endTurn', currentRoomId);
             }
         });
 
-        socket.on('turnSwapped', ({ turn, board }) => { updateTurnHeader(turn); drawBoard(board); clearState(); });
+        // 🛠️ 기물 선택 해제 시 남은 행동 기회에 맞춰 안전하게 기본 모드를 복구하는 헬퍼 함수
+        function autoSelectDefaultMode(hasMoved, hasAttacked) {
+            if (!hasMoved) setActionMode('move');
+            else if (!hasAttacked) setActionMode('attack');
+        }
 
-        function updateTurnHeader(turnId) { const turnDisplay = document.getElementById('turn-display'); if(turnDisplay) turnDisplay.innerText = socket.id === turnId ? "당신의 턴입니다" : "상대방이 생각 중입니다"; }
-        function clearState() { selectedSquare = null; setActionMode('move'); clearHighlights(); }
+        socket.on('turnSwapped', ({ turn, board }) => { 
+            updateTurnHeader(turn); 
+            drawBoard(board); 
+            clearState(); 
+        });
+
+        // 🛠️ 턴 정보 교체 시 버튼 제어권 전면 재설정
+        function updateTurnHeader(turnId) { 
+            const turnDisplay = document.getElementById('turn-display'); 
+            isMyTurn = (socket.id === turnId);
+
+            if(turnDisplay) {
+                turnDisplay.innerText = isMyTurn ? "당신의 턴입니다" : "상대방이 생각 중입니다"; 
+            }
+
+            // 내 턴이 시작되면 버튼 잠금을 전부 풀고 '이동' 모드로 강제 지정
+            if (isMyTurn) {
+                btnModeMove.disabled = false;
+                btnModeAttack.disabled = false;
+                btnEndTurn.disabled = false;
+                setActionMode('move'); 
+            } else {
+                // 상대방 턴일 때는 모든 버튼을 비활성화하여 오작동 차단
+                btnModeMove.disabled = true;
+                btnModeAttack.disabled = true;
+                btnEndTurn.disabled = true;
+                btnModeMove.classList.remove('mode-active');
+                btnModeAttack.classList.remove('mode-active');
+            }
+        }
+
+        function clearState() { 
+            selectedSquare = null; 
+            clearHighlights(); 
+        }
 
         function drawBoard(board) {
             currentBoard = board;
@@ -303,25 +343,23 @@
         }
 
         function handleCellClick(x, y) {
-            // 1. 이동 가능한 하이라이트 칸을 클릭했을 때 이벤트 송신
+            if (!isMyTurn) return; // 내 턴이 아니면 클릭 조작 완전 차단
+
             if (currentMode === 'move' && movableCells.some(c => c.x === x && c.y === y)) {
                 socket.emit('actionMove', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
                 return;
             }
-            // 2. 공격 가능한 하이라이트 칸을 클릭했을 때 이벤트 송신
             if (currentMode === 'attack' && attackableCells.some(c => c.x === x && c.y === y)) {
                 socket.emit('actionAttack', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
-                setTimeout(() => { setActionMode('move'); selectedSquare = null; clearHighlights(); }, 100);
+                setTimeout(() => { selectedSquare = null; clearHighlights(); }, 100);
                 return;
             }
 
-            // 아군 기물을 새로 선택하기 위해 기존 하이라이트 초기화
             clearHighlights();
             document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected'));
             selectedSquare = null;
 
             const piece = currentBoard[y][x];
-            // 내 기물인 경우에만 선택 좌표를 갱신하고 사거리 경로 계산 함수 호출
             if (piece && piece.player === myRole && piece.type !== 'Bomb') {
                 selectedSquare = { x, y };
                 const selectedCell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
@@ -332,7 +370,7 @@
 
         function calculatePaths(cx, cy, piece) {
             clearHighlights();
-            if (piece.player !== myRole) return; 
+            if (piece.player !== myRole || !isMyTurn) return; 
 
             const data = pieceDB[piece.type];
             if (!data) return;
@@ -345,7 +383,7 @@
 
             const isTeamB = piece.player === 'B';
 
-            if (currentMode === 'move') {
+            if (currentMode === 'move' && !btnModeMove.disabled) {
                 if (data.moveDirs.includes('L')) {
                     const knightMoves = [
                         {x:cx-1, y:cy-2}, {x:cx+1, y:cy-2}, {x:cx-2, y:cy-1}, {x:cx+2, y:cy-1},
@@ -380,7 +418,7 @@
                     });
                 }
             } 
-            else if (currentMode === 'attack') {
+            else if (currentMode === 'attack' && !btnModeAttack.disabled) {
                 if (data.attackDirs.includes('L')) {
                     const knightMoves = [
                         {x:cx-1, y:cy-2}, {x:cx+1, y:cy-2}, {x:cx-2, y:cy-1}, {x:cx+2, y:cy-1},

@@ -173,7 +173,18 @@
             }
         }
 
-        socket.on('roomCreated', ({ roomId }) => { currentRoomId = roomId; myRole = 'A'; lobby.classList.add('hidden'); gameContainer.classList.remove('hidden'); setActionMode('move'); });
+        // 🛠️ 방 생성 성공 시 코드 출력 버그 수정 파트
+        socket.on('roomCreated', ({ roomId }) => { 
+            currentRoomId = roomId; 
+            myRole = 'A'; 
+            lobby.classList.add('hidden'); 
+            gameContainer.classList.remove('hidden'); 
+            
+            const turnDisplay = document.getElementById('turn-display');
+            if(turnDisplay) turnDisplay.innerText = `방 코드: ${roomId} (상대방 대기 중)`;
+            setActionMode('move'); 
+        });
+
         socket.on('gameStarted', ({ roomId, board, players, turn, db }) => { currentRoomId = roomId; pieceDB = db; if (!myRole) myRole = socket.id === players[0] ? 'A' : 'B'; lobby.classList.add('hidden'); deckEditor.classList.add('hidden'); gameContainer.classList.remove('hidden'); updateTurnHeader(turn); setActionMode('move'); drawBoard(board); });
         socket.on('actionProcessed', ({ board, activePiece }) => { drawBoard(board); clearHighlights(); selectedSquare = activePiece; if(selectedSquare) { const cell = document.querySelector(`[data-x="${selectedSquare.x}"][data-y="${selectedSquare.y}"]`); if(cell) cell.classList.add('selected'); if(currentMode) setActionMode(currentMode); } });
         socket.on('turnSwapped', ({ turn, board }) => { updateTurnHeader(turn); drawBoard(board); clearState(); });
@@ -181,7 +192,6 @@
         function updateTurnHeader(turnId) { const turnDisplay = document.getElementById('turn-display'); if(turnDisplay) turnDisplay.innerText = socket.id === turnId ? "당신의 턴입니다" : "상대방이 생각 중입니다"; }
         function clearState() { selectedSquare = null; setActionMode('move'); clearHighlights(); }
 
-        // 내 기물(A)이 아래, 상대 기물(B)이 위에 오도록 시점 반전 공식 전면 수정
         function drawBoard(board) {
             currentBoard = board;
             const container = document.getElementById('chess-board');
@@ -190,8 +200,6 @@
 
             for (let i = 0; i < 8; i++) {
                 for (let j = 0; j < 8; j++) {
-                    // 기본 시점(A) : i=0이 위쪽(B진영), i=7이 아래쪽(A진영)
-                    // B팀 시점 : i=0이 아래쪽(B진영), i=7이 위쪽(A진영)이 되도록 뒤집음
                     const y = myRole === 'A' ? i : 7 - i;
                     const x = myRole === 'A' ? j : 7 - j;
 
@@ -203,7 +211,7 @@
                     const p = board[y][x];
                     if (p) {
                         if (p.player !== myRole && p.stealth) {
-                            // 은신 상태인 상대편 유닛은 렌더링하지 않음
+                            // 은신 처리
                         } else {
                             const pDiv = document.createElement('div');
                             pDiv.className = `piece team-${p.player} ${p.stealth ? 'stealth' : ''} ${p.type === 'Bomb' ? 'bomb-p' : ''}`;
@@ -327,6 +335,10 @@
 
             movableCells.forEach(c => { const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`); if(targetCell) targetCell.classList.add('movable'); });
             attackableCells.forEach(c => { const targetCell = document.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`); if(targetCell) targetCell.classList.add('attackable'); });
+        }
+
+        function deleteHighlights() { // 호환성용 매핑 유지
+            clearHighlights();
         }
 
         function clearHighlights() {

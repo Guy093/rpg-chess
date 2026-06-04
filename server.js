@@ -7,16 +7,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
 
-// 🌐 [치명적 버그 수정] 클라이언트 정적 파일(index.html)을 브라우저에 제공하는 미들웨어 주입
 app.use(express.static(path.join(__dirname)));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const games = {}; 
-
-// 🗺️ 기물 마스터 데이터베이스 (방향: 1,2,3 = 전진 / 7,8,9 = 후진)
+// 🗺️ 기존 기물 마스터 데이터베이스 원본 완벽 보존
 const PIECE_DATABASE = {
     'Pawn': { name: '병사', moveDirs: ['1','2','3','4','6','8'], attackDirs: ['2','4','6'], moveRange: 1, attackRange: 1, tier: 'Basics', desc: '처음 이동 시 2칸 전진 가능.' },
     'Mercenary': { name: '용병', moveDirs: ['1','2','3','4','6','7','8','9'], attackDirs: ['2','4','6'], moveRange: 1, attackRange: 1, tier: 'Common', desc: '특별한 효과가 없습니다.' },
@@ -30,10 +27,10 @@ const PIECE_DATABASE = {
     'Knight': { name: '나이트(진화)', moveDirs: ['L'], attackDirs: ['L'], moveRange: 1, attackRange: 1, tier: 'Legend', desc: '견습생이 진화한 형태입니다. 체스의 나이트처럼 이동합니다.' }
 };
 
-// 🎨 각 유저의 덱 커스텀 조합 배열을 받아와 매칭형 보드를 동적으로 초기화하는 함수
+const games = {}; 
+
 function createInitialBoard(deckA, deckB) {
     let board = Array(8).fill(null).map(() => Array(8).fill(null));
-    
     const defaultDeck = ['Pawn', 'Mercenary', 'Assassin', 'Berserker', 'RushWarrior', 'Apprentice', 'SuicideBomber', 'GhostKnight'];
     
     const setupA = deckA && deckA.length >= 6 ? deckA : defaultDeck;
@@ -43,12 +40,10 @@ function createInitialBoard(deckA, deckB) {
         let typeB = setupB[i] ? setupB[i] : 'GhostKnight';
         let typeA = setupA[i] ? setupA[i] : 'GhostKnight';
 
-        // 플레이어 B (위쪽 진영, index 1)
         board[1][i] = { 
             type: typeB, player: 'B', id: `B-${typeB}-${i}-${Math.random().toString(36).substring(2,5)}`, 
             isFirstMove: true, stealth: typeB === 'GhostKnight', killCount: 0, assassinStealthTurn: 0 
         };
-        // 플레이어 A (아래쪽 진영, index 6)
         board[6][i] = { 
             type: typeA, player: 'A', id: `A-${typeA}-${i}-${Math.random().toString(36).substring(2,5)}`, 
             isFirstMove: true, stealth: typeA === 'GhostKnight', killCount: 0, assassinStealthTurn: 0 
@@ -58,7 +53,6 @@ function createInitialBoard(deckA, deckB) {
 }
 
 io.on('connection', (socket) => {
-    // 방 생성 시 클라이언트가 드래그 앤 드롭으로 완성해 보낸 'customDeck'을 보관함
     socket.on('createRoom', ({ customDeck }) => {
         const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
         games[roomId] = { 
@@ -74,7 +68,6 @@ io.on('connection', (socket) => {
         socket.emit('roomCreated', { roomId });
     });
 
-    // 방 입장 시 참가자의 'customDeck'도 함께 수신받음
     socket.on('joinRoom', ({ roomId, customDeck }) => {
         const game = games[roomId];
         if (!game || game.players.length >= 2) return;
@@ -90,6 +83,7 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('gameStarted', { roomId, players: game.players, board: game.board, turn: game.turn, db: PIECE_DATABASE });
     });
 
+    // 👟 이동 행동 처리
     socket.on('actionMove', ({ roomId, from, to }) => {
         const game = games[roomId];
         if (!game || game.turn !== socket.id) return;
@@ -124,6 +118,7 @@ io.on('connection', (socket) => {
         if (game.hasMoved && game.hasAttacked) forceNextTurn(roomId);
     });
 
+    // ⚔️ 공격 행동 처리
     socket.on('actionAttack', ({ roomId, from, to }) => {
         const game = games[roomId];
         if (!game || game.turn !== socket.id) return;
@@ -134,11 +129,7 @@ io.on('connection', (socket) => {
         if (attacker.type === 'GhostKnight') attacker.stealth = false;
         if (attacker.type === 'RushWarrior' && game.rushAttackLeft <= 0) return;
 
-        let targetDied = false;
-
         if (target.player !== attacker.player) {
-            targetDied = true;
-            
             if (attacker.type === 'Assassin') {
                 attacker.stealth = true;
                 attacker.assassinStealthTurn = 2; 
@@ -189,6 +180,7 @@ io.on('connection', (socket) => {
         const currentTurnPlayer = game.players[0] === game.turn ? 'A' : 'B';
         const nextTurnPlayer = game.players[0] === game.turn ? 'B' : 'A';
 
+        // 시한폭탄 터지는 시스템 보정
         for (let y = 0; y < 8; y++) {
             for (let x = 0; x < 8; x++) {
                 const p = game.board[y][x];
@@ -200,6 +192,7 @@ io.on('connection', (socket) => {
 
         game.turn = game.players.find(id => id !== game.turn);
         
+        // 암살자 은신 지속시간 차감
         for (let y = 0; y < 8; y++) {
             for (let x = 0; x < 8; x++) {
                 const p = game.board[y][x];
@@ -225,9 +218,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => { delete games[socket.id]; });
 });
 
-// 🌐 배포 환경(Render 등)의 포트를 동적으로 받고, 없으면 3000을 씁니다.
 const PORT = process.env.PORT || 3000;
-
 server.listen(PORT, () => {
     console.log(`서버가 성공적으로 가동되었습니다. 최신 포트: ${PORT}`);
 });

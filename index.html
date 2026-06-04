@@ -4,14 +4,11 @@
     <meta charset="UTF-8">
     <title>RPG Chess - 통합 버전</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; background: #222; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        body { font-family: 'Malgun Gothic', sans-serif; background: #222; color: #fff; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
         .hidden { display: none !important; }
-        button { background: #7f8c8d; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; margin: 5px; }
-        .slot { width: 60px; height: 80px; border: 2px solid #fff; background: #2c3e50; display: inline-block; text-align: center; line-height: 80px; }
-        .board { display: grid; grid-template-columns: repeat(8, 65px); grid-template-rows: repeat(8, 65px); border: 5px solid #444; }
-        .cell { width: 65px; height: 65px; border: 1px solid #555; display: flex; align-items: center; justify-content: center; }
-        .movable { border: 3px solid #2ecc71; }
-        .attackable { border: 3px solid #e74c3c; }
+        button { background: #7f8c8d; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin: 5px; }
+        .board { display: grid; grid-template-columns: repeat(8, 65px); grid-template-rows: repeat(8, 65px); border: 5px solid #444; margin: 20px auto; }
+        .cell { width: 65px; height: 65px; border: 1px solid #555; }
     </style>
 </head>
 <body>
@@ -27,11 +24,11 @@
     <div id="deck-editor" class="hidden">
         <div id="deck-slots"></div>
         <div id="pool-list"></div>
-        <button id="btn-deck-save">저장</button>
+        <button id="btn-deck-save">저장 후 로비로</button>
     </div>
 
     <div id="game-container" class="hidden">
-        <h3 id="turn-display">대기 중...</h3>
+        <h3 id="turn-display">상대방 대기 중...</h3>
         <div class="board" id="chess-board"></div>
         <button id="btn-mode-move">이동</button>
         <button id="btn-mode-attack">공격</button>
@@ -42,38 +39,38 @@
     <script>
         const socket = io();
         let myDeck = ['Pawn', 'Mercenary', 'Assassin', 'Berserker', 'RushWarrior', 'Apprentice'];
-        const CLIENT_DB = { 'Pawn': '병사', 'Mercenary': '용병', 'Assassin': '암살자', 'Berserker': '광전사', 'RushWarrior': '돌격병', 'Apprentice': '견습생' };
+        const lobby = document.getElementById('lobby');
+        const deckEditor = document.getElementById('deck-editor');
+        const gameContainer = document.getElementById('game-container');
 
-        // [방 기능]
+        // [방 기능 복원]
         document.getElementById('btn-create').onclick = () => socket.emit('createRoom', { customDeck: myDeck });
         document.getElementById('btn-join').onclick = () => {
             const code = document.getElementById('room-input').value;
             socket.emit('joinRoom', { roomId: code, customDeck: myDeck });
         };
 
-        // [덱 수정 기능]
-        document.getElementById('btn-deck-open').onclick = () => {
-            document.getElementById('lobby').classList.add('hidden');
-            document.getElementById('deck-editor').classList.remove('hidden');
-        };
-        
-        document.getElementById('btn-deck-save').onclick = () => {
-            document.getElementById('deck-editor').classList.add('hidden');
-            document.getElementById('lobby').classList.remove('hidden');
-        };
-
-        // [핵심 통신 로직]
+        // [방 생성/참가 이벤트 처리]
         socket.on('roomCreated', ({ roomId }) => alert('방 생성 완료! 코드: ' + roomId));
-        
         socket.on('gameStarted', ({ roomId }) => {
-            document.getElementById('lobby').classList.add('hidden');
-            document.getElementById('game-container').classList.remove('hidden');
+            lobby.classList.add('hidden');
+            gameContainer.classList.remove('hidden');
         });
 
-        // 턴 종료 및 모드 전환 로직 등은 기존에 안내해 드린 'actionProcessed' 이벤트를 아래에 연결하세요.
+        // [덱 수정 기능 복원]
+        document.getElementById('btn-deck-open').onclick = () => { lobby.classList.add('hidden'); deckEditor.classList.remove('hidden'); };
+        document.getElementById('btn-deck-save').onclick = () => { deckEditor.classList.add('hidden'); lobby.classList.remove('hidden'); };
+
+        // [게임 핵심 로직 (서버 데이터 기반)]
         socket.on('actionProcessed', ({ board, rushMoveLeft, rushAttackLeft }) => {
-            // 보드 그리기 및 버튼 상태 제어
-            // 버튼 활성화 여부: btnModeMove.disabled = (rushMoveLeft <= 0);
+            // 보드 업데이트
+            // btnModeMove.disabled = (rushMoveLeft <= 0);
+            // btnModeAttack.disabled = (rushAttackLeft <= 0);
+            
+            // 모든 기회 소진 시 자동 턴 종료 유도
+            if (rushMoveLeft <= 0 && rushAttackLeft <= 0) {
+                socket.emit('endTurn', currentRoomId);
+            }
         });
     </script>
 </body>

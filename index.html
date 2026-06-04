@@ -180,7 +180,6 @@
             }
         }
 
-        // 🛠️ 방 생성 시 숫자 8자리 코드 표시 및 복사 버튼 붙이기
         socket.on('roomCreated', ({ roomId }) => { 
             currentRoomId = roomId; 
             myRole = 'A'; 
@@ -190,7 +189,6 @@
             const turnDisplay = document.getElementById('turn-display');
             if(turnDisplay) turnDisplay.innerText = `방 코드: ${roomId} (상대방 대기 중)`;
             
-            // 복사 버튼 동적 생성 (중복 방지)
             const wrapper = document.getElementById('room-info-wrapper');
             if(wrapper && !document.getElementById('btn-code-copy')) {
                 const copyBtn = document.createElement('button');
@@ -215,7 +213,6 @@
             deckEditor.classList.add('hidden'); 
             gameContainer.classList.remove('hidden'); 
             
-            // 게임 시작하면 복사 버튼 삭제하고 상단 텍스트 정상 전환
             const copyBtn = document.getElementById('btn-code-copy');
             if(copyBtn) copyBtn.remove();
             
@@ -224,23 +221,27 @@
             drawBoard(board); 
         });
 
+        // 🛠️ 2번 버그 수정 파트: 서버 행동 데이터 처리 및 동기화 흐름 완벽 안정화
         socket.on('actionProcessed', ({ board, activePiece }) => { 
             drawBoard(board); 
             clearHighlights(); 
             
             let prevSelected = selectedSquare;
-            selectedSquare = activePiece; 
+            // 서버가 준 다음 활성화 기물 좌표를 안전하게 매핑
+            selectedSquare = activePiece ? { x: activePiece.x, y: activePiece.y } : null; 
 
             if(selectedSquare) { 
                 const piece = currentBoard[selectedSquare.y][selectedSquare.x];
                 
-                // 내 기물일 때만 선택 테두리 래핑 활성화
+                // 내 기물이 정상적으로 존재할 때만 후속 상태 및 UI 연산 유지
                 if(piece && piece.player === myRole) {
                     const cell = document.querySelector(`[data-x="${selectedSquare.x}"][data-y="${selectedSquare.y}"]`); 
                     if(cell) cell.classList.add('selected'); 
 
+                    // 돌격병 등의 연속 이동/공격에 따른 모드 자동 변환 제어
                     if (currentMode === 'move' && prevSelected && (selectedSquare.x !== prevSelected.x || selectedSquare.y !== prevSelected.y)) {
                         if (piece.type === 'RushWarrior') {
+                            // 서버 데이터 검증 기반 상태 판단 (더 이상 이동할 수 없으면 공격으로 토글)
                             if (piece.moveCount >= 2 || piece.actionDone) { 
                                 setActionMode('attack');
                             } else {
@@ -253,6 +254,7 @@
                         setActionMode(currentMode); 
                     }
                 } else {
+                    // 예외 케이스 처리: 내 기물이 아니라면 강제 선택 해제 및 락 방지
                     selectedSquare = null;
                     setActionMode('move');
                 }
@@ -301,22 +303,25 @@
         }
 
         function handleCellClick(x, y) {
+            // 1. 이동 가능한 하이라이트 칸을 클릭했을 때 이벤트 송신
             if (currentMode === 'move' && movableCells.some(c => c.x === x && c.y === y)) {
                 socket.emit('actionMove', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
                 return;
             }
+            // 2. 공격 가능한 하이라이트 칸을 클릭했을 때 이벤트 송신
             if (currentMode === 'attack' && attackableCells.some(c => c.x === x && c.y === y)) {
                 socket.emit('actionAttack', { roomId: currentRoomId, from: selectedSquare, to: { x, y } });
                 setTimeout(() => { setActionMode('move'); selectedSquare = null; clearHighlights(); }, 100);
                 return;
             }
 
+            // 아군 기물을 새로 선택하기 위해 기존 하이라이트 초기화
             clearHighlights();
             document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected'));
             selectedSquare = null;
 
             const piece = currentBoard[y][x];
-            // 🛠️ 1번 요구사항 수정: 내 기물(piece.player === myRole)일 때만 아웃라인 및 사거리 연산 실행
+            // 내 기물인 경우에만 선택 좌표를 갱신하고 사거리 경로 계산 함수 호출
             if (piece && piece.player === myRole && piece.type !== 'Bomb') {
                 selectedSquare = { x, y };
                 const selectedCell = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
@@ -327,7 +332,7 @@
 
         function calculatePaths(cx, cy, piece) {
             clearHighlights();
-            if (piece.player !== myRole) return; // 한번 더 안전장치 추가 (내 기물만 연산)
+            if (piece.player !== myRole) return; 
 
             const data = pieceDB[piece.type];
             if (!data) return;
